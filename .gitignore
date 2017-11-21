@@ -1,3 +1,7 @@
+# Private files
+secret
+token
+
 # Binaries for programs and plugins
 *.exe
 *.dll
