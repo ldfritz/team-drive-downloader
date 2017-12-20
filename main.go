@@ -2,6 +2,9 @@ package tddl
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"path"
 	"strings"
 
@@ -66,6 +69,24 @@ func GetFolderID(svc *drive.Service, pathname string) (string, string, error) {
 	return driveID, folderID, nil
 }
 
+func GetFileID(svc *drive.Service, pathname string) (string, string, error) {
+	pathname = strings.TrimRight(pathname, "/")
+	driveID, folderID, err := GetFolderID(svc, path.Dir(pathname))
+	filename := path.Base(pathname)
+	if err != nil {
+		return driveID, folderID, fmt.Errorf("unable to find folder: %v", err)
+	}
+	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("'%s' in parents and trashed=false and name='%s'", folderID, filename)).Do()
+	if err != nil {
+		return driveID, "", fmt.Errorf("unable to get file ID: %v", err)
+	}
+	if len(resp.Files) == 0 {
+		return driveID, "", fmt.Errorf("unable to find folder: %v", filename)
+	}
+	fileID := resp.Files[0].Id
+	return driveID, fileID, nil
+}
+
 func ListFiles(svc *drive.Service, driveID, folderID string) (*drive.FileList, error) {
 	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("'%s' in parents and trashed=false", folderID)).Do()
 	if err != nil {
@@ -89,6 +110,25 @@ func slicePath(pathname string) []string {
 	return ps
 }
 
-func DownloadFile(src, dest string) error {
-	return fmt.Errorf("download has not been implemented yet")
+func DownloadFile(svc *drive.Service, src, dest string) error {
+	// I need to re-implement the export conversions
+	// Google MIME types: https://developers.google.com/drive/v3/web/mime-types
+	// Other MIME types: https://developers.google.com/drive/v3/web/manage-downloads
+	_, fileID, err := GetFileID(svc, src)
+	if err != nil {
+		return fmt.Errorf("unable to find file: %v", err)
+	}
+	var resp *http.Response
+	resp, err = svc.Files.Get(fileID).Download()
+	if err != nil {
+		return fmt.Errorf("unable to download file: %v", err)
+	}
+	defer resp.Body.Close()
+	out, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("unable to create file: %v", err)
+	}
+	defer out.Close()
+	io.Copy(out, resp.Body)
+	return nil
 }

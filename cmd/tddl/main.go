@@ -73,7 +73,7 @@ func main() {
 		}
 		src := os.Args[2]
 		dest := os.Args[3]
-		err := tddl.DownloadFile(src, dest)
+		err := tddl.DownloadFile(svc, src, dest)
 		if err != nil {
 			log.Fatalln("unable to download file:", err)
 		}
