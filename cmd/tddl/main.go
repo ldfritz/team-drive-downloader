@@ -24,7 +24,14 @@ func main() {
 	flagHelp := flag.Bool("help", false, "display help")
 	flagH := flag.Bool("h", false, "display help")
 	flagMIME := flag.String("mime", "", "set export MIME type")
+	flagFiles := flag.Bool("files", false, "target files exclusively")
+	flagF := flag.Bool("f", false, "target files exclusively")
 	flag.Parse()
+
+	opts := tddl.Options{}
+	opts.Help = *flagHelp || *flagH
+	opts.MIME = *flagMIME
+	opts.Files = *flagFiles || *flagF
 
 	// Connection boilerplate
 	ctx := context.Background()
@@ -43,7 +50,7 @@ func main() {
 	}
 	// /Connection boilerplate
 
-	if len(flag.Args()) == 0 || *flagHelp || *flagH {
+	if len(flag.Args()) == 0 || opts.Help {
 		fmt.Println(mainHelp)
 		return
 	}
@@ -60,7 +67,7 @@ func main() {
 		}
 	case cmd == "ls":
 		pathname := flag.Arg(1)
-		files, err := tddl.GetFolderContents(svc, pathname)
+		files, err := tddl.GetFolderContents(svc, pathname, opts)
 		if err != nil {
 			log.Fatalln("unable to get path contents:", err)
 		}
@@ -79,7 +86,7 @@ func main() {
 		}
 		src := flag.Arg(1)
 		dest := flag.Arg(2)
-		err := tddl.DownloadFile(svc, src, dest, *flagMIME)
+		err := tddl.DownloadFile(svc, src, dest, opts)
 		if err != nil {
 			log.Fatalln("unable to download file:", err)
 		}

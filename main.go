@@ -19,12 +19,12 @@ func GetAllTeamDrives(svc *drive.Service) ([]*drive.TeamDrive, error) {
 	return resp.TeamDrives, nil
 }
 
-func GetFolderContents(svc *drive.Service, pathname string) (*drive.FileList, error) {
+func GetFolderContents(svc *drive.Service, pathname string, opts Options) (*drive.FileList, error) {
 	driveID, folderID, err := GetFolderID(svc, pathname)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find folder: %v", err)
 	}
-	files, err := ListFiles(svc, driveID, folderID)
+	files, err := ListFiles(svc, driveID, folderID, opts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list contets: %v", err)
 	}
@@ -57,7 +57,8 @@ func GetFolderID(svc *drive.Service, pathname string) (string, string, error) {
 	driveID := td.Id
 	folderID := driveID
 	for _, v := range ps[1:] {
-		resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("mimeType='application/vnd.google-apps.folder' and '%s' in parents and trashed=false and name='%s'", folderID, v)).Do()
+		query := fmt.Sprintf("mimeType='application/vnd.google-apps.folder' and '%s' in parents and trashed=false and name='%s'", folderID, v)
+		resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(query).Do()
 		if err != nil {
 			return driveID, "", fmt.Errorf("unable to get folder ID: %v", err)
 		}
@@ -76,7 +77,8 @@ func GetFileID(svc *drive.Service, pathname string) (string, string, error) {
 	if err != nil {
 		return driveID, folderID, fmt.Errorf("unable to find folder: %v", err)
 	}
-	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("'%s' in parents and trashed=false and name='%s'", folderID, filename)).Do()
+	query := fmt.Sprintf("'%s' in parents and trashed=false and name='%s'", folderID, filename)
+	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(query).Do()
 	if err != nil {
 		return driveID, "", fmt.Errorf("unable to get file ID: %v", err)
 	}
@@ -87,8 +89,12 @@ func GetFileID(svc *drive.Service, pathname string) (string, string, error) {
 	return driveID, fileID, nil
 }
 
-func ListFiles(svc *drive.Service, driveID, folderID string) (*drive.FileList, error) {
-	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("'%s' in parents and trashed=false", folderID)).Do()
+func ListFiles(svc *drive.Service, driveID, folderID string, opts Options) (*drive.FileList, error) {
+	query := fmt.Sprintf("'%s' in parents and trashed=false", folderID)
+	if opts.Files {
+		query += " and mimeType!='application/vnd.google-apps.folder'"
+	}
+	resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(query).Do()
 	if err != nil {
 		return resp, fmt.Errorf("unable to get files: %v", err)
 	}
@@ -110,7 +116,7 @@ func slicePath(pathname string) []string {
 	return ps
 }
 
-func DownloadFile(svc *drive.Service, src, dest, mime string) error {
+func DownloadFile(svc *drive.Service, src, dest string, opts Options) error {
 	_, fileID, err := GetFileID(svc, src)
 	if err != nil {
 		return fmt.Errorf("DownloadFile() -> unable to find file: %v", err)
@@ -120,14 +126,14 @@ func DownloadFile(svc *drive.Service, src, dest, mime string) error {
 		return fmt.Errorf("DownloadFile() -> unable to get file: %v", err)
 	}
 	var resp *http.Response
-	if mime != "" && file.MimeType != mime {
+	if opts.MIME != "" && file.MimeType != opts.MIME {
 		if !GoogleMIMETypes[file.MimeType] {
 			return fmt.Errorf("only Google documents can be converted")
 		}
-		if !ExportMIMETypes[mime] {
+		if !ExportMIMETypes[opts.MIME] {
 			return fmt.Errorf("unknown export MIME type")
 		}
-		resp, err = svc.Files.Export(fileID, mime).Download()
+		resp, err = svc.Files.Export(fileID, opts.MIME).Download()
 		if err != nil {
 			return fmt.Errorf("unable to export file: %v", err)
 		}
