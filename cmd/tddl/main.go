@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/ldfritz/go-helpers/googleservices"
 	"github.com/ldfritz/team-drive-downloader"
@@ -11,15 +11,21 @@ import (
 	drive "google.golang.org/api/drive/v3"
 )
 
-var mainHelp = `usage: tddl COMMAND [ARGUMENTS]
+var mainHelp = `usage: tddl [OPTIONS] COMMAND [ARGUMENTS]
 
 Commands:
   dl SOURCE DESTINATION    Download a Team Drive file.
   ls [DRIVE]/[PATH]        List contents of Drive folder.
+  mv SOURCE DESTINATION    Move a Team Drive file to a new folder.
   help                     Display this message.
   version                  Display version information.`
 
 func main() {
+	flagHelp := flag.Bool("help", false, "display help")
+	flagH := flag.Bool("h", false, "display help")
+	flagMIME := flag.String("mime", "", "set export MIME type")
+	flag.Parse()
+
 	// Connection boilerplate
 	ctx := context.Background()
 	secretFilename := "secret"
@@ -37,14 +43,14 @@ func main() {
 	}
 	// /Connection boilerplate
 
-	if len(os.Args) < 2 {
+	if len(flag.Args()) == 0 || *flagHelp || *flagH {
 		fmt.Println(mainHelp)
 		return
 	}
 
-	cmd := os.Args[1]
+	cmd := flag.Arg(0)
 	switch {
-	case cmd == "ls" && len(os.Args) == 2:
+	case cmd == "ls" && len(flag.Args()) == 1: // only arg is cmd
 		drives, err := tddl.GetAllTeamDrives(svc)
 		if err != nil {
 			log.Fatalln("unable to get Team Drives:", err)
@@ -53,7 +59,7 @@ func main() {
 			fmt.Printf("%s/\n", v.Name)
 		}
 	case cmd == "ls":
-		pathname := os.Args[2]
+		pathname := flag.Arg(1)
 		files, err := tddl.GetFolderContents(svc, pathname)
 		if err != nil {
 			log.Fatalln("unable to get path contents:", err)
@@ -66,21 +72,32 @@ func main() {
 			fmt.Print("\n")
 		}
 	case cmd == "dl":
-		if len(os.Args) < 4 {
+		if len(flag.Args()) < 3 { // need arg, src, dest
 			fmt.Println("error: need source and destination for download\n")
 			fmt.Println(mainHelp)
 			return
 		}
-		src := os.Args[2]
-		dest := os.Args[3]
-		err := tddl.DownloadFile(svc, src, dest)
+		src := flag.Arg(1)
+		dest := flag.Arg(2)
+		err := tddl.DownloadFile(svc, src, dest, *flagMIME)
 		if err != nil {
 			log.Fatalln("unable to download file:", err)
+		}
+	case cmd == "mv":
+		if len(flag.Args()) < 3 { // need arg, src, dest
+			fmt.Println("error: need source and destination for move\n")
+			fmt.Println(mainHelp)
+			return
+		}
+		src := flag.Arg(1)
+		dest := flag.Arg(2)
+		err := tddl.MoveFile(svc, src, dest)
+		if err != nil {
+			log.Fatalln("unable to move file:", err)
 		}
 	case cmd == "version":
 		fmt.Println(tddl.Version)
 	default:
 		fmt.Println(mainHelp)
-
 	}
 }

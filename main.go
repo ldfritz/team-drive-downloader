@@ -110,25 +110,103 @@ func slicePath(pathname string) []string {
 	return ps
 }
 
-func DownloadFile(svc *drive.Service, src, dest string) error {
-	// I need to re-implement the export conversions
-	// Google MIME types: https://developers.google.com/drive/v3/web/mime-types
-	// Other MIME types: https://developers.google.com/drive/v3/web/manage-downloads
+func DownloadFile(svc *drive.Service, src, dest, mime string) error {
 	_, fileID, err := GetFileID(svc, src)
 	if err != nil {
-		return fmt.Errorf("unable to find file: %v", err)
+		return fmt.Errorf("DownloadFile() -> unable to find file: %v", err)
+	}
+	file, err := svc.Files.Get(fileID).SupportsTeamDrives(true).Do()
+	if err != nil {
+		return fmt.Errorf("DownloadFile() -> unable to get file: %v", err)
 	}
 	var resp *http.Response
-	resp, err = svc.Files.Get(fileID).Download()
-	if err != nil {
-		return fmt.Errorf("unable to download file: %v", err)
+	if mime != "" && file.MimeType != mime {
+		if !GoogleMIMETypes[file.MimeType] {
+			return fmt.Errorf("only Google documents can be converted")
+		}
+		if !ExportMIMETypes[mime] {
+			return fmt.Errorf("unknown export MIME type")
+		}
+		resp, err = svc.Files.Export(fileID, mime).Download()
+		if err != nil {
+			return fmt.Errorf("unable to export file: %v", err)
+		}
+	} else {
+		resp, err = svc.Files.Get(fileID).Download()
+		if err != nil {
+			return fmt.Errorf("DownloadFile() -> unable to download file: %v", err)
+		}
 	}
 	defer resp.Body.Close()
 	out, err := os.Create(dest)
 	if err != nil {
-		return fmt.Errorf("unable to create file: %v", err)
+		return fmt.Errorf("DownloadFile() -> unable to create file: %v", err)
 	}
 	defer out.Close()
 	io.Copy(out, resp.Body)
+	return nil
+}
+
+var (
+	// Google MIME types: https://developers.google.com/drive/v3/web/mime-types
+	GoogleMIMETypes = map[string]bool{
+		"application/vnd.google-apps.audio":        true,
+		"application/vnd.google-apps.document":     true,
+		"application/vnd.google-apps.drawing":      true,
+		"application/vnd.google-apps.file":         true,
+		"application/vnd.google-apps.folder":       true,
+		"application/vnd.google-apps.form":         true,
+		"application/vnd.google-apps.fusiontable":  true,
+		"application/vnd.google-apps.map":          true,
+		"application/vnd.google-apps.photo":        true,
+		"application/vnd.google-apps.presentation": true,
+		"application/vnd.google-apps.script":       true,
+		"application/vnd.google-apps.site":         true,
+		"application/vnd.google-apps.spreadsheet":  true,
+		"application/vnd.google-apps.unknown":      true,
+		"application/vnd.google-apps.video":        true,
+		"application/vnd.google-apps.drive-sdk":    true,
+	}
+	// Other MIME types: https://developers.google.com/drive/v3/web/manage-downloads
+	ExportMIMETypes = map[string]bool{
+		"application/epub+zip":                                                      true,
+		"application/pdf":                                                           true,
+		"application/rtf":                                                           true,
+		"application/vnd.google-apps.script+json":                                   true,
+		"application/vnd.oasis.opendocument.presentation":                           true,
+		"application/vnd.oasis.opendocument.text":                                   true,
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   true,
+		"application/x-vnd.oasis.opendocument.spreadsheet":                          true,
+		"application/zip":                                                           true,
+		"image/jpeg":                                                                true,
+		"image/png":                                                                 true,
+		"image/svg+xml":                                                             true,
+		"text/csv":                                                                  true,
+		"text/html":                                                                 true,
+		"text/plain":                                                                true,
+		"text/tab-separated-values":                                                 true,
+	}
+)
+
+func MoveFile(svc *drive.Service, src, dest string) error {
+	_, fileID, err := GetFileID(svc, src)
+	if err != nil {
+		return fmt.Errorf("MoveFile() -> unable to find file: %v", err)
+	}
+	_, oldFolderID, err := GetFolderID(svc, path.Dir(src))
+	if err != nil {
+		return fmt.Errorf("MoveFile() -> unable to find old parent folder: %v", err)
+	}
+	_, newFolderID, err := GetFolderID(svc, dest)
+	if err != nil {
+		return fmt.Errorf("MoveFile() -> unable to find new parent folder file: %v", err)
+	}
+
+	_, err = svc.Files.Update(fileID, &drive.File{}).SupportsTeamDrives(true).AddParents(newFolderID).RemoveParents(oldFolderID).Do()
+	if err != nil {
+		return fmt.Errorf("MoveFile() -> unable to move file: %v", err)
+	}
 	return nil
 }
