@@ -11,6 +11,14 @@ import (
 	drive "google.golang.org/api/drive/v3"
 )
 
+var mainHelp = `usage: tddl COMMAND [ARGUMENTS]
+
+Commands:
+  dl SOURCE DESTINATION    Download a Team Drive file.
+  ls [DRIVE]/[PATH]        List contents of Drive folder.
+  help                     Display this message.
+  version                  Display version information.`
+
 func main() {
 	// Connection boilerplate
 	ctx := context.Background()
@@ -29,14 +37,6 @@ func main() {
 	}
 	// /Connection boilerplate
 
-	mainHelp := `usage: tddl COMMAND [ARGUMENTS]
-
-Commands:
-  ls [DRIVE]/[PATH]    List contents of Drive folder.
-  help                 Display help message and exit.
-  version              Display version and exit.
-`
-
 	if len(os.Args) < 2 {
 		fmt.Println(mainHelp)
 		return
@@ -50,7 +50,7 @@ Commands:
 			log.Fatalln("unable to get Team Drives:", err)
 		}
 		for _, v := range drives {
-			fmt.Println(v.Id, v.Name)
+			fmt.Printf("%s/\n", v.Name)
 		}
 	case cmd == "ls":
 		pathname := os.Args[2]
@@ -59,7 +59,23 @@ Commands:
 			log.Fatalln("unable to get path contents:", err)
 		}
 		for _, v := range files.Files {
-			fmt.Println(v.Id, v.Name)
+			fmt.Print(v.Name)
+			if v.MimeType == "application/vnd.google-apps.folder" {
+				fmt.Print("/")
+			}
+			fmt.Print("\n")
+		}
+	case cmd == "dl":
+		if len(os.Args) < 4 {
+			fmt.Println("error: need source and destination for download\n")
+			fmt.Println(mainHelp)
+			return
+		}
+		src := os.Args[2]
+		dest := os.Args[3]
+		err := tddl.DownloadFile(src, dest)
+		if err != nil {
+			log.Fatalln("unable to download file:", err)
 		}
 	case cmd == "version":
 		fmt.Println(tddl.Version)

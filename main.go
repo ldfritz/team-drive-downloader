@@ -17,16 +17,11 @@ func GetAllTeamDrives(svc *drive.Service) ([]*drive.TeamDrive, error) {
 }
 
 func GetFolderContents(svc *drive.Service, pathname string) (*drive.FileList, error) {
-	ps := slicePath(pathname)
-	td, err := GetTeamDriveByName(svc, ps[0])
-	if err != nil {
-		return nil, fmt.Errorf("unable to get Team Drive: %v", err)
-	}
-	folderID, err := GetFolderID(svc, td.Id, ps[1:])
+	driveID, folderID, err := GetFolderID(svc, pathname)
 	if err != nil {
 		return nil, fmt.Errorf("unable to find folder: %v", err)
 	}
-	files, err := ListFiles(svc, td.Id, folderID)
+	files, err := ListFiles(svc, driveID, folderID)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list contets: %v", err)
 	}
@@ -50,19 +45,25 @@ func GetTeamDriveByName(svc *drive.Service, name string) (*drive.TeamDrive, erro
 	return td, nil
 }
 
-func GetFolderID(svc *drive.Service, driveID string, ps []string) (string, error) {
+func GetFolderID(svc *drive.Service, pathname string) (string, string, error) {
+	ps := slicePath(pathname)
+	td, err := GetTeamDriveByName(svc, ps[0])
+	if err != nil {
+		return "", "", fmt.Errorf("unable to get Team Drive: %v", err)
+	}
+	driveID := td.Id
 	folderID := driveID
-	for _, v := range ps {
+	for _, v := range ps[1:] {
 		resp, err := svc.Files.List().Corpora("teamDrive").TeamDriveId(driveID).IncludeTeamDriveItems(true).SupportsTeamDrives(true).Q(fmt.Sprintf("mimeType='application/vnd.google-apps.folder' and '%s' in parents and trashed=false and name='%s'", folderID, v)).Do()
 		if err != nil {
-			return "", fmt.Errorf("unable to get folder ID: %v", err)
+			return driveID, "", fmt.Errorf("unable to get folder ID: %v", err)
 		}
 		if len(resp.Files) == 0 {
-			return "", fmt.Errorf("unable to find folder: %v", v)
+			return driveID, "", fmt.Errorf("unable to find folder: %v", v)
 		}
 		folderID = resp.Files[0].Id
 	}
-	return folderID, nil
+	return driveID, folderID, nil
 }
 
 func ListFiles(svc *drive.Service, driveID, folderID string) (*drive.FileList, error) {
@@ -86,4 +87,8 @@ func slicePath(pathname string) []string {
 		ps[i], ps[len(ps)-1-i] = ps[len(ps)-1-i], ps[i]
 	}
 	return ps
+}
+
+func DownloadFile(src, dest string) error {
+	return fmt.Errorf("download has not been implemented yet")
 }
